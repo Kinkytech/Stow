@@ -94,6 +94,27 @@ export class SavingsProjectionService {
         break;
       }
 
+      case 'strategy_changed': {
+        // Decode yield-adapter strategy_changed event:
+        // - Activation: from is null, to is set
+        // - Migration: from and to are both set
+        // - Emergency clear: from is set, to is null
+        const from = data.from ? Number(data.from) : null;
+        const to = data.to ? Number(data.to) : null;
+
+        // Log for admin/ops historical tracking; no side effects needed
+        if (from === null && to !== null) {
+          this.logger.log(`Strategy activation: strategy_id=${to}`);
+        } else if (from !== null && to !== null) {
+          this.logger.log(`Strategy migration: from=${from} to=${to}`);
+        } else if (from !== null && to === null) {
+          this.logger.log(
+            `Strategy emergency clear: cleared strategy_id=${from}`,
+          );
+        }
+        break;
+      }
+
       default:
         this.logger.debug(`No projection handler for topic "${topic}"`);
         break;

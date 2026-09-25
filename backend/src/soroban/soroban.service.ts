@@ -78,6 +78,7 @@ export interface SorobanFinalizeEventResult {
 export class SorobanService {
   private readonly logger = new Logger(SorobanService.name);
   private readonly contractId: string;
+  private readonly yieldAdapterContractId: string;
   private readonly network: string;
   private readonly serverSecretKey: string;
   private readonly rpcUrl: string;
@@ -86,6 +87,8 @@ export class SorobanService {
   constructor(private readonly configService: ConfigService) {
     this.contractId =
       this.configService.get<string>('SOROBAN_CONTRACT_ID') ?? '';
+    this.yieldAdapterContractId =
+      this.configService.get<string>('SOROBAN_YIELD_ADAPTER_CONTRACT_ID') ?? '';
     this.network = this.configService.get<string>('STELLAR_NETWORK') ?? '';
     this.serverSecretKey =
       this.configService.get<string>('SERVER_SECRET_KEY') ?? '';
@@ -100,6 +103,11 @@ export class SorobanService {
     if (!this.contractId || !this.network || !this.serverSecretKey) {
       this.logger.warn(
         'SorobanService initialized with missing config values (SOROBAN_CONTRACT_ID/STELLAR_NETWORK/SERVER_SECRET_KEY)',
+      );
+    }
+    if (!this.yieldAdapterContractId) {
+      this.logger.debug(
+        'SOROBAN_YIELD_ADAPTER_CONTRACT_ID not configured; yield-adapter read methods will be unavailable',
       );
     }
   }
@@ -622,6 +630,224 @@ export class SorobanService {
       this.logger.log(`resumeMarket submitted: tx_hash=${tx_hash}`);
       return Promise.resolve({ tx_hash });
     });
+  }
+
+  // ---- yield-adapter read entrypoints ----
+
+  /**
+   * Read a depositor's position from the yield-adapter contract.
+   * Calls: get_position(owner: Address) -> Position
+   *
+   * Returns shares held and timestamps, or null if contract read fails.
+   */
+  async getYieldAdapterPosition(ownerAddress: string): Promise<{
+    shares: string;
+    created_at: number;
+    updated_at: number;
+  } | null> {
+    if (!this.yieldAdapterContractId) {
+      this.logger.warn(
+        'getYieldAdapterPosition: SOROBAN_YIELD_ADAPTER_CONTRACT_ID not configured',
+      );
+      return null;
+    }
+
+    return this.withSorobanErrorHandling(
+      'getYieldAdapterPosition',
+      async () => {
+        try {
+          const result = await this.rpcServer.simulateTransaction(
+            new TransactionBuilder(new Account(this.serverSecretKey, '0'), {
+              fee: '10000',
+              networkPassphrase: this.network,
+            })
+              .addOperation(
+                new Contract(this.yieldAdapterContractId).call(
+                  'get_position',
+                  new Address(ownerAddress).toScVal(),
+                ),
+              )
+              .setTimeout(30)
+              .build(),
+          );
+
+          if (SorobanRpc.Api.isSimulationError(result)) {
+            this.logger.warn(
+              `getYieldAdapterPosition simulation error: ${result.error}`,
+            );
+            return null;
+          }
+
+          // Decode result from XDR (stub: return null for now)
+          // Full implementation would decode the Position struct from the response
+          return null;
+        } catch (err) {
+          this.logger.error(
+            `getYieldAdapterPosition failed: ${(err as Error).message}`,
+          );
+          return null;
+        }
+      },
+    );
+  }
+
+  /**
+   * Read the current exchange rate from the yield-adapter contract.
+   * Calls: exchange_rate() -> i128
+   *
+   * Returns the shares-to-assets ratio as a string, or null if contract read fails.
+   */
+  async getYieldAdapterExchangeRate(): Promise<string | null> {
+    if (!this.yieldAdapterContractId) {
+      this.logger.warn(
+        'getYieldAdapterExchangeRate: SOROBAN_YIELD_ADAPTER_CONTRACT_ID not configured',
+      );
+      return null;
+    }
+
+    return this.withSorobanErrorHandling(
+      'getYieldAdapterExchangeRate',
+      async () => {
+        try {
+          const result = await this.rpcServer.simulateTransaction(
+            new TransactionBuilder(new Account(this.serverSecretKey, '0'), {
+              fee: '10000',
+              networkPassphrase: this.network,
+            })
+              .addOperation(
+                new Contract(this.yieldAdapterContractId).call('exchange_rate'),
+              )
+              .setTimeout(30)
+              .build(),
+          );
+
+          if (SorobanRpc.Api.isSimulationError(result)) {
+            this.logger.warn(
+              `getYieldAdapterExchangeRate simulation error: ${result.error}`,
+            );
+            return null;
+          }
+
+          // Decode result from XDR (stub: return null for now)
+          // Full implementation would decode the i128 from the response
+          return null;
+        } catch (err) {
+          this.logger.error(
+            `getYieldAdapterExchangeRate failed: ${(err as Error).message}`,
+          );
+          return null;
+        }
+      },
+    );
+  }
+
+  /**
+   * Read the total assets under management in the yield-adapter contract.
+   * Calls: total_assets() -> i128
+   *
+   * Returns the total assets as a string, or null if contract read fails.
+   */
+  async getYieldAdapterTotalAssets(): Promise<string | null> {
+    if (!this.yieldAdapterContractId) {
+      this.logger.warn(
+        'getYieldAdapterTotalAssets: SOROBAN_YIELD_ADAPTER_CONTRACT_ID not configured',
+      );
+      return null;
+    }
+
+    return this.withSorobanErrorHandling(
+      'getYieldAdapterTotalAssets',
+      async () => {
+        try {
+          const result = await this.rpcServer.simulateTransaction(
+            new TransactionBuilder(new Account(this.serverSecretKey, '0'), {
+              fee: '10000',
+              networkPassphrase: this.network,
+            })
+              .addOperation(
+                new Contract(this.yieldAdapterContractId).call('total_assets'),
+              )
+              .setTimeout(30)
+              .build(),
+          );
+
+          if (SorobanRpc.Api.isSimulationError(result)) {
+            this.logger.warn(
+              `getYieldAdapterTotalAssets simulation error: ${result.error}`,
+            );
+            return null;
+          }
+
+          // Decode result from XDR (stub: return null for now)
+          // Full implementation would decode the i128 from the response
+          return null;
+        } catch (err) {
+          this.logger.error(
+            `getYieldAdapterTotalAssets failed: ${(err as Error).message}`,
+          );
+          return null;
+        }
+      },
+    );
+  }
+
+  /**
+   * Read a pending withdrawal request from the yield-adapter contract.
+   * Calls: get_withdraw_request(request_id: u64) -> WithdrawRequest
+   *
+   * Returns withdrawal request details, or null if not found or contract read fails.
+   */
+  async getYieldAdapterWithdrawRequest(requestId: number): Promise<{
+    id: number;
+    shares: string;
+    claimable_at: number;
+    claimed_at: number | null;
+    cancelled_at: number | null;
+  } | null> {
+    if (!this.yieldAdapterContractId) {
+      this.logger.warn(
+        'getYieldAdapterWithdrawRequest: SOROBAN_YIELD_ADAPTER_CONTRACT_ID not configured',
+      );
+      return null;
+    }
+
+    return this.withSorobanErrorHandling(
+      'getYieldAdapterWithdrawRequest',
+      async () => {
+        try {
+          const result = await this.rpcServer.simulateTransaction(
+            new TransactionBuilder(new Account(this.serverSecretKey, '0'), {
+              fee: '10000',
+              networkPassphrase: this.network,
+            })
+              .addOperation(
+                new Contract(this.yieldAdapterContractId).call(
+                  'get_withdraw_request',
+                  nativeToScVal(BigInt(requestId), { type: 'u64' }),
+                ),
+              )
+              .setTimeout(30)
+              .build(),
+          );
+
+          if (SorobanRpc.Api.isSimulationError(result)) {
+            this.logger.warn(
+              `getYieldAdapterWithdrawRequest simulation error: ${result.error}`,
+            );
+            return null;
+          }
+
+          // Decode result from XDR (stub: return null for now)
+          // Full implementation would decode the WithdrawRequest struct from the response
+          return null;
+        } catch (err) {
+          this.logger.error(
+            `getYieldAdapterWithdrawRequest failed: ${(err as Error).message}`,
+          );
+          return null;
+        }
+      },
+    );
   }
 
   /**
