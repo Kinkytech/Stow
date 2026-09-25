@@ -48,7 +48,6 @@ fn setup_with_token(env: &Env) -> (YieldAdapterClient, Address, Address, Address
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore = "TODO(issue): implement admin::initialize"]
 fn initialize_sets_admin_treasury_and_token() {
     let env = Env::default();
     env.mock_all_auths();
@@ -57,6 +56,21 @@ fn initialize_sets_admin_treasury_and_token() {
     assert_eq!(client.treasury(), treasury);
     assert_eq!(client.token(), token);
     assert_eq!(client.total_shares(), 0);
+    // Not extended to also assert `total_assets() == 0` (per this issue's
+    // "if needed" wording): `accounting::total_assets` still calls out to
+    // the active-strategy balance-reporting interface documented in
+    // README.md's "Strategy interface", which is not implemented yet and
+    // is out of scope for this issue — see #245/#246/#247 disclosure.
+}
+
+#[test]
+fn admin_treasury_token_error_before_initialize() {
+    let env = Env::default();
+    let client = setup(&env);
+
+    assert_eq!(client.try_admin(), Err(Ok(Error::NotInitialized)));
+    assert_eq!(client.try_treasury(), Err(Ok(Error::NotInitialized)));
+    assert_eq!(client.try_token(), Err(Ok(Error::NotInitialized)));
 }
 
 #[test]
@@ -155,7 +169,15 @@ fn paused_blocks_mutations_but_not_claim_withdraw() {
 }
 
 #[test]
-#[ignore = "TODO(issue): implement admin::initialize guard"]
 fn initialize_twice_rejected() {
-    todo!("initialize, call initialize again, assert Error::AlreadyInitialized");
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, treasury, token) = setup_with_token(&env);
+
+    let second_admin = Address::generate(&env);
+    let result = client.try_initialize(&second_admin, &treasury, &token);
+    assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
+
+    // The original values must survive the rejected re-initialization.
+    assert_eq!(client.admin(), admin);
 }

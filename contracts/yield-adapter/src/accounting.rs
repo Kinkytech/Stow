@@ -25,6 +25,7 @@
 use soroban_sdk::Env;
 
 use crate::error::Error;
+use crate::types::DataKey;
 
 /// Total vault-token value the adapter is responsible for: its own idle
 /// balance plus whatever is currently deployed in the active strategy
@@ -38,10 +39,11 @@ pub fn total_assets(_env: &Env) -> i128 {
 
 /// Total shares outstanding across all positions. Backed by the
 /// `DataKey::TotalShares` running total, not a scan over `Position` entries.
-///
-/// TODO(issue): implement.
-pub fn total_shares(_env: &Env) -> i128 {
-    unimplemented!("accounting: total_shares")
+pub fn total_shares(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::TotalShares)
+        .unwrap_or(0)
 }
 
 /// Convert an asset amount to shares at the current exchange rate, rounding

@@ -127,3 +127,26 @@ Each topic's exact data payload will be finalized alongside the entrypoint
 that emits it (see the corresponding module doc comment) — documented here
 once implemented, mirroring `savings-vault/README.md`'s "Event schema"
 section.
+
+### Topics
+
+#### `init`
+Topics: `(Symbol("init"),)`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `admin` | `Address` | Initial admin. |
+| `treasury` | `Address` | Initial treasury (receives collected performance fees). |
+| `token` | `Address` | SEP-41 token this adapter routes. |
+| `schema_version` | `u32` | Value of `EVENT_SCHEMA_VERSION` at deploy time. |
+| `timestamp` | `u64` | Ledger timestamp of the call. |
+
+Remaining topics (`admin_set`, `paused_changed`, `upgraded`, `deposited`,
+`withdraw_requested`, `withdraw_claimed`, `withdraw_cancelled`,
+`strategy_registered`, `strategy_deregistered`, `strategy_changed`,
+`harvested`, `fee_collected`) are declared in `events.rs` but their
+publishers are not yet wired into the corresponding entrypoints, which are
+themselves still unimplemented — see each module's `TODO(issue)` doc
+comments. Documenting their payloads ahead of the entrypoints that would
+emit them would drift out of sync with whatever the eventual
+implementation actually needs.
