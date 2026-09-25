@@ -3,7 +3,7 @@
 use soroban_sdk::{Address, BytesN, Env};
 
 use crate::error::Error;
-use crate::events::{EVENT_SCHEMA_VERSION, TOPIC_INIT};
+use crate::events::{EVENT_SCHEMA_VERSION, TOPIC_INIT, TOPIC_PAUSED_CHANGED};
 use crate::storage::{self, extend_instance_ttl};
 use crate::types::DataKey;
 
@@ -94,8 +94,11 @@ pub fn set_treasury(_env: &Env, _caller: Address, _new_treasury: Address) -> Res
 
 /// The performance fee, in basis points (0-10_000), charged only on positive
 /// yield at `harvest` time. Defaults to `0` before ever set.
-pub fn performance_fee_bps(_env: &Env) -> u32 {
-    unimplemented!("admin: performance_fee_bps")
+pub fn performance_fee_bps(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::PerformanceFeeBps)
+        .unwrap_or(0)
 }
 
 /// Set the performance fee. Admin-only.
@@ -105,10 +108,19 @@ pub fn performance_fee_bps(_env: &Env) -> u32 {
 ///   `fees` module doc for why this cap exists.
 /// - Takes effect on the *next* `harvest` call; does not retroactively
 ///   apply to yield already reported.
-///
-/// TODO(issue): implement.
-pub fn set_performance_fee_bps(_env: &Env, _caller: Address, _bps: u32) -> Result<(), Error> {
-    unimplemented!("admin: set_performance_fee_bps")
+pub fn set_performance_fee_bps(env: &Env, caller: Address, bps: u32) -> Result<(), Error> {
+    caller.require_auth();
+    let current_admin = admin(env)?;
+    if caller != current_admin {
+        return Err(Error::Unauthorized);
+    }
+    crate::fees::validate_fee_bps(bps)?;
+
+    extend_instance_ttl(env);
+    env.storage()
+        .instance()
+        .set(&DataKey::PerformanceFeeBps, &bps);
+    Ok(())
 }
 
 /// Set the emergency-pause flag. Admin-only.
@@ -116,22 +128,33 @@ pub fn set_performance_fee_bps(_env: &Env, _caller: Address, _bps: u32) -> Resul
 /// While paused, `deposit`, `request_withdraw`, `harvest`, and strategy
 /// mutations reject with `Error::Paused`; `claim_withdraw` and reads remain
 /// available so users already mid-withdrawal are never trapped by a pause.
-///
-/// TODO(issue): implement — mirrors `savings-vault::admin::set_paused`, but
-/// note the narrower blocklist above (deliberately different from
-/// `savings-vault`, which pauses all mutations).
-pub fn set_paused(_env: &Env, _caller: Address, _paused: bool) -> Result<(), Error> {
-    unimplemented!("admin: set_paused")
+pub fn set_paused(env: &Env, caller: Address, paused: bool) -> Result<(), Error> {
+    caller.require_auth();
+    let current_admin = admin(env)?;
+    if caller != current_admin {
+        return Err(Error::Unauthorized);
+    }
+    extend_instance_ttl(env);
+    env.storage().instance().set(&DataKey::Paused, &paused);
+    env.events()
+        .publish((TOPIC_PAUSED_CHANGED,), (paused, env.ledger().timestamp()));
+    Ok(())
 }
 
 /// Whether the contract is currently paused. Defaults to `false` if unset.
-pub fn is_paused(_env: &Env) -> bool {
-    unimplemented!("admin: is_paused")
+pub fn is_paused(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get(&DataKey::Paused)
+        .unwrap_or(false)
 }
 
 /// Guard for mutating entrypoints: returns `Error::Paused` while paused.
-pub fn require_not_paused(_env: &Env) -> Result<(), Error> {
-    unimplemented!("admin: require_not_paused")
+pub fn require_not_paused(env: &Env) -> Result<(), Error> {
+    if is_paused(env) {
+        return Err(Error::Paused);
+    }
+    Ok(())
 }
 
 /// Cooldown, in seconds, `request_withdraw` must wait before
