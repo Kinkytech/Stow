@@ -198,4 +198,52 @@ describe('SavingsController', () => {
       );
     });
   });
+
+  describe('getYieldPosition', () => {
+    it("returns the authenticated user's yield position", async () => {
+      const user = { id: 'user-1', stellar_address: 'GUSER' };
+      const updated = new Date();
+
+      const savingsService = controller['savingsService'];
+      jest.spyOn(savingsService, 'getYieldPosition').mockResolvedValue({
+        address: 'GUSER',
+        shares: '1000000000',
+        estimated_asset_value: '1250000000',
+        exchange_rate_snapshot: '1.25',
+        pending_withdrawal_claimable_at: null,
+        updated_at: updated,
+      });
+
+      const result = await controller.getYieldPosition(user as any);
+
+      expect(savingsService.getYieldPosition).toHaveBeenCalledWith('GUSER');
+      expect(result).toEqual({
+        address: 'GUSER',
+        shares: '1000000000',
+        estimated_asset_value: '1250000000',
+        exchange_rate_snapshot: '1.25',
+        pending_withdrawal_claimable_at: null,
+        updated_at: updated,
+      });
+    });
+
+    it('returns well-formed empty response for a user with no position', async () => {
+      const user = { id: 'user-1', stellar_address: 'GNOPOSITION' };
+
+      const savingsService = controller['savingsService'];
+      jest.spyOn(savingsService, 'getYieldPosition').mockResolvedValue({
+        address: 'GNOPOSITION',
+        shares: '0',
+        estimated_asset_value: null,
+        exchange_rate_snapshot: null,
+        pending_withdrawal_claimable_at: null,
+        updated_at: expect.any(Date),
+      });
+
+      const result = await controller.getYieldPosition(user as any);
+
+      expect(result.shares).toBe('0');
+      expect(result.estimated_asset_value).toBeNull();
+    });
+  });
 });

@@ -4,6 +4,7 @@ import {
   NotFoundException,
   Param,
   Query,
+  UseGuards,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
@@ -13,15 +14,20 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GoalsService } from '../goals/goals.service';
 import { BalanceService } from './balance.service';
 import { LockedPlansService } from './locked-plans.service';
 import { ListGoalsDto } from './dto/list-goals.dto';
 import { ListLockedDto } from './dto/list-locked.dto';
+import { YieldPositionResponseDto } from './dto/yield-position-response.dto';
 import { SavingsListQueryDto } from './dto/pagination.dto';
 import { SavingsService } from './savings.service';
+import { User } from '../users/entities/user.entity';
 
 @ApiTags('savings')
 @Controller('savings')
@@ -159,4 +165,27 @@ export class SavingsController {
     }
     return account;
   }
-}
+
+  /**
+   * GET /savings/yield/position
+   *
+   * Returns the authenticated caller's yield-adapter position:
+   * shares held, estimated asset value, and pending withdrawal status.
+   * Returns a well-formed empty response (200) if the user has no position,
+   * not a 404.
+   */
+  @Get('yield/position')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get the authenticated user's yield position" })
+  @ApiResponse({
+    status: 200,
+    description: "User's yield position with shares and estimated value",
+    type: YieldPositionResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getYieldPosition(
+    @CurrentUser() user: User,
+  ): Promise<YieldPositionResponseDto> {
+    return this.savingsService.getYieldPosition(user.stellar_address);
+  }
